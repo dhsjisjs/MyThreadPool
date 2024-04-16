@@ -1,15 +1,17 @@
-
 package Worker
 
 import (
 	"sync"
+	"sync/atomic"
 )
 
 var PayloadPool *sync.Pool
+var Created int64
 
 func InitPayloadPool() {
 	PayloadPool = &sync.Pool{
 		New: func() any {
+			atomic.AddInt64(&Created, 1)
 			p := new(Payload)
 			p.Wait = make(chan any, 1)
 			return p
@@ -19,7 +21,9 @@ func InitPayloadPool() {
 
 type HandleFunc func() any
 
+
 type Worker struct {
+	// Todo: Change it to "Linked List", there is no need to use chanel, we only need it to be concurrent safe
 	Payload chan *Payload
 }
 
@@ -42,7 +46,7 @@ type Pool struct {
 	pool []*Worker
 	// max capacity of workers
 	MaxCapacity int
-	// which worker will be picker when calling Get()
+	// which worker will be picker when calling Get(), before it reach maxium capacity, it is always 0
 	CurrentWorkerOffset int
 	// how many workers are in the pool
 	CurrentWorker int
@@ -61,6 +65,9 @@ func NewWorker() *Worker {
 
 // returns the worker that handles the payload,  ignore it.
 func (p *Pool) Add(Payload *Payload) *Worker {
+	if Payload == nil || Payload.Do == nil {
+		return nil
+	}
 	p.m.Lock()
 	w := p.Get()
 	w.Payload <- Payload
